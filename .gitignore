@@ -51,23 +51,23 @@ instance/
 ehthumbs.db
 Thumbs.db
 
-# Exclude all templates except essential ones
+# Exclude all templates except the ones we want
 templates/*
 !templates/base.html
 !templates/index.html
 !templates/login.html
 !templates/register.html
 !templates/dashboard.html
+!templates/quiz.html
+!templates/quizzes.html
+!templates/study_plan.html
+!templates/leaderboard.html
 
 # Exclude test and sample data files
 create_sample_data.py
 test_*.py
 
-# Exclude all static files except essential ones
+# Static files configuration
 static/*
-!static/css/
-!static/js/
-static/css/*
-!static/css/style.css
-static/js/*
-!static/js/main.js 
+!static/style.css
+!static/dark-mode.css 
