@@ -60,6 +60,10 @@
                     <div class="display-4 mb-2"></div>
                     <p class="text-muted"></p>
                 </div>
+                <div id="detailedResults" class="mt-3">
+                    <h6>Detailed Results:</h6>
+                    <div class="results-content"></div>
+                </div>
                 <div id="sustainabilityBonus" class="mt-3"></div>
                 <div id="studyPlanInfo" class="alert alert-info mt-3">
                     <i class="fas fa-info-circle"></i>
@@ -101,6 +105,14 @@ quizForm.addEventListener('submit', async (e) => {
         });
     });
     
+    // Log the data being sent
+    console.log('Submitting quiz data:', {
+        quiz_id: quizForm.dataset.quizId,
+        answers: answers,
+        completion_time: completionTime,
+        low_bandwidth: document.getElementById('lowBandwidth').checked
+    });
+    
     try {
         const response = await fetch('/submit_quiz', {
             method: 'POST',
@@ -116,12 +128,33 @@ quizForm.addEventListener('submit', async (e) => {
         });
         
         const result = await response.json();
+        console.log('Server response:', result);  // Log the server response
+        
         if (response.ok) {
             const scoreDisplay = document.querySelector('#quizScore .display-4');
             const scoreText = document.querySelector('#quizScore p');
+            const detailedResults = document.querySelector('#detailedResults .results-content');
             
             scoreDisplay.textContent = `${result.score.toFixed(1)}%`;
             scoreText.textContent = `${result.correct_count} out of ${result.total_questions} questions correct`;
+            
+            // Display detailed results for each answer
+            if (result.detailed_results) {
+                let detailedHtml = '<div class="list-group">';
+                result.detailed_results.forEach((detail, index) => {
+                    const scoreClass = detail.is_correct ? 'text-success' : 'text-danger';
+                    detailedHtml += `
+                        <div class="list-group-item">
+                            <h6>Question ${index + 1}</h6>
+                            <p><strong>Your Answer:</strong> ${detail.user_answer}</p>
+                            <p><strong>Score:</strong> <span class="${scoreClass}">${(detail.similarity_score * 100).toFixed(1)}%</span></p>
+                            <p><strong>Matched Keywords:</strong> ${detail.matched_keywords.join(', ') || 'None'}</p>
+                        </div>
+                    `;
+                });
+                detailedHtml += '</div>';
+                detailedResults.innerHTML = detailedHtml;
+            }
             
             if (document.getElementById('lowBandwidth').checked) {
                 document.getElementById('sustainabilityBonus').innerHTML = `
@@ -137,6 +170,7 @@ quizForm.addEventListener('submit', async (e) => {
             throw new Error(result.error || 'Failed to submit quiz');
         }
     } catch (error) {
+        console.error('Error submitting quiz:', error);  // Log any errors
         alert('Error submitting quiz: ' + error.message);
     } finally {
         submitButton.disabled = false;
