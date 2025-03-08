@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome to LeafLearn{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2 text-center">
+        <h1 class="display-4 mb-4">Welcome to LeafLearn</h1>
+        <p class="lead mb-5">
+            The sustainable learning platform that helps you grow while protecting our planet.
+        </p>
+        
+        <div class="row mb-5">
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <i class="fas fa-brain fa-3x text-primary mb-3"></i>
+                        <h3>AI-Powered Learning</h3>
+                        <p>Personalized study plans tailored to your needs using advanced AI technology.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <i class="fas fa-leaf fa-3x text-success mb-3"></i>
+                        <h3>Eco-Friendly</h3>
+                        <p>Learn while minimizing your environmental impact through sustainable features.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <i class="fas fa-chart-line fa-3x text-info mb-3"></i>
+                        <h3>Track Progress</h3>
+                        <p>Monitor your learning journey and sustainability achievements in real-time.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="cta-buttons">
+            <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg me-3">Get Started</a>
+            <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-lg">Login</a>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Why Choose LeafLearn?</h2>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4><i class="fas fa-check-circle text-success"></i> Smart Features</h4>
+                        <ul class="list-unstyled">
+                            <li class="mb-2">✓ AI-powered quiz analysis</li>
+                            <li class="mb-2">✓ Personalized study recommendations</li>
+                            <li class="mb-2">✓ Adaptive learning paths</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h4><i class="fas fa-leaf text-success"></i> Sustainability</h4>
+                        <ul class="list-unstyled">
+                            <li class="mb-2">✓ Energy-efficient dark mode</li>
+                            <li class="mb-2">✓ Low-bandwidth options</li>
+                            <li class="mb-2">✓ Sustainability rewards system</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
