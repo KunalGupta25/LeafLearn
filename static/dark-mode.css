@@ -1,0 +1,67 @@
+body.dark-mode {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+}
+
+.dark-mode .card {
+    background-color: #2d2d2d;
+    border-color: #404040;
+}
+
+.dark-mode .card-title {
+    color: #ffffff;
+}
+
+.dark-mode .table {
+    color: #e0e0e0;
+}
+
+.dark-mode .table thead th {
+    border-bottom-color: #404040;
+}
+
+.dark-mode .table td,
+.dark-mode .table th {
+    border-color: #404040;
+}
+
+.dark-mode .list-group-item {
+    background-color: #2d2d2d;
+    border-color: #404040;
+    color: #e0e0e0;
+}
+
+.dark-mode .list-group-item:hover {
+    background-color: #363636;
+}
+
+.dark-mode .text-muted {
+    color: #a0a0a0 !important;
+}
+
+.dark-mode .progress {
+    background-color: #404040;
+}
+
+.dark-mode .alert {
+    background-color: #2d2d2d;
+    border-color: #404040;
+    color: #e0e0e0;
+}
+
+.dark-mode pre {
+    background-color: #363636;
+    color: #e0e0e0;
+}
+
+.dark-mode .form-control {
+    background-color: #363636;
+    border-color: #404040;
+    color: #e0e0e0;
+}
+
+.dark-mode .form-control:focus {
+    background-color: #404040;
+    border-color: #505050;
+    color: #ffffff;
+} 

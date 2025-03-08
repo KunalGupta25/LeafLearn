@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}{{ quiz.title }} - LeafLearn{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title">{{ quiz.title }}</h2>
+                <p class="text-muted">Topic: {{ quiz.topic }} | Difficulty: {{ quiz.difficulty }}</p>
+                
+                <form id="quizForm" data-quiz-id="{{ quiz.id }}">
+                    {% for question in quiz.questions %}
+                    <div class="question-container mb-4">
+                        <h5>Question {{ loop.index }}</h5>
+                        <p>{{ question.content }}</p>
+                        <div class="form-group">
+                            <textarea 
+                                class="form-control" 
+                                name="answer_{{ question.id }}" 
+                                rows="3" 
+                                required 
+                                data-question-id="{{ question.id }}"
+                                placeholder="Type your answer here..."
+                            ></textarea>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="lowBandwidth">
+                            <label class="form-check-label" for="lowBandwidth">
+                                <i class="fas fa-leaf text-success"></i>
+                                Use low-bandwidth mode (+5 sustainability points)
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-paper-plane"></i>
+                            Submit Quiz
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Result Modal -->
+<div class="modal fade" id="resultModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Quiz Results</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="quizScore" class="text-center mb-4">
+                    <div class="display-4 mb-2"></div>
+                    <p class="text-muted"></p>
+                </div>
+                <div id="sustainabilityBonus" class="mt-3"></div>
+                <div id="studyPlanInfo" class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle"></i>
+                    A personalized study plan has been created based on your results.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" id="viewStudyPlan" class="btn btn-primary">
+                    <i class="fas fa-book-reader"></i>
+                    View Study Plan
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let startTime;
+const quizForm = document.getElementById('quizForm');
+const resultModal = new bootstrap.Modal(document.getElementById('resultModal'));
+
+quizForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitButton = quizForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+    
+    const endTime = Date.now();
+    const completionTime = Math.round((endTime - startTime) / 1000);
+    
+    const answers = [];
+    document.querySelectorAll('[data-question-id]').forEach(textarea => {
+        answers.push({
+            question_id: textarea.dataset.questionId,
+            answer: textarea.value.trim()
+        });
+    });
+    
+    try {
+        const response = await fetch('/submit_quiz', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                quiz_id: quizForm.dataset.quizId,
+                answers: answers,
+                completion_time: completionTime,
+                low_bandwidth: document.getElementById('lowBandwidth').checked
+            })
+        });
+        
+        const result = await response.json();
+        if (response.ok) {
+            const scoreDisplay = document.querySelector('#quizScore .display-4');
+            const scoreText = document.querySelector('#quizScore p');
+            
+            scoreDisplay.textContent = `${result.score.toFixed(1)}%`;
+            scoreText.textContent = `${result.correct_count} out of ${result.total_questions} questions correct`;
+            
+            if (document.getElementById('lowBandwidth').checked) {
+                document.getElementById('sustainabilityBonus').innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-leaf"></i> +5 Sustainability points for using low-bandwidth mode!
+                    </div>
+                `;
+            }
+            
+            document.getElementById('viewStudyPlan').href = `/study_plan/${result.study_plan_id}`;
+            resultModal.show();
+        } else {
+            throw new Error(result.error || 'Failed to submit quiz');
+        }
+    } catch (error) {
+        alert('Error submitting quiz: ' + error.message);
+    } finally {
+        submitButton.disabled = false;
+        submitButton.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Quiz';
+    }
+});
+
+// Start timer when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    startTime = Date.now();
+});
+</script>
+{% endblock %} 

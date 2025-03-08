@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Available Quizzes - LeafLearn{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title">Available Quizzes</h2>
+                {% if quizzes %}
+                <div class="list-group">
+                    {% for quiz in quizzes %}
+                    <a href="{{ url_for('take_quiz', quiz_id=quiz.id) }}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 class="mb-1">{{ quiz.title }}</h5>
+                            <small class="text-muted">{{ quiz.difficulty }}</small>
+                        </div>
+                        <p class="mb-1">Topic: {{ quiz.topic }}</p>
+                        <small class="text-muted">{{ quiz.questions|length }} questions</small>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">No quizzes available at the moment.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

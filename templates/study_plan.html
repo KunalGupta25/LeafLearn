@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Study Plan - LeafLearn{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title">Your Personalized Study Plan</h2>
+                <p class="text-muted">Topic: {{ plan.topic }} | Difficulty: {{ plan.difficulty_level }}</p>
+                
+                <div class="progress mb-4">
+                    {% set completed = plan.resources|selectattr('completion_status', 'true')|list|length %}
+                    {% set total = plan.resources|length %}
+                    {% set progress = (completed / total * 100) if total > 0 else 0 %}
+                    <div class="progress-bar" role="progressbar" style="width: {{ progress }}%">
+                        {{ completed }}/{{ total }} Resources Completed
+                    </div>
+                </div>
+
+                <div class="resources-container">
+                    <h3 class="mb-3">Learning Resources</h3>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="lowBandwidthFilter" {% if request.args.get('low_bandwidth') %}checked{% endif %}>
+                        <label class="form-check-label" for="lowBandwidthFilter">
+                            Show only low-bandwidth resources
+                        </label>
+                    </div>
+
+                    <div class="list-group">
+                        {% for resource in plan.resources %}
+                        <div class="list-group-item {% if resource.is_low_bandwidth %}low-bandwidth{% endif %}" 
+                             {% if not resource.is_low_bandwidth %}data-high-bandwidth{% endif %}>
+                            <div class="d-flex w-100 justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-1">
+                                        {% if resource.resource_type == 'video' %}
+                                        <i class="fas fa-video text-primary"></i>
+                                        {% elif resource.resource_type == 'article' %}
+                                        <i class="fas fa-file-alt text-success"></i>
+                                        {% else %}
+                                        <i class="fas fa-tasks text-warning"></i>
+                                        {% endif %}
+                                        {{ resource.title }}
+                                    </h5>
+                                    <p class="mb-1">Type: {{ resource.resource_type|title }}</p>
+                                    {% if resource.is_low_bandwidth %}
+                                    <span class="badge bg-success">Low Bandwidth</span>
+                                    {% endif %}
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <div class="form-check me-3">
+                                        <input class="form-check-input resource-completion" 
+                                               type="checkbox" 
+                                               data-resource-id="{{ resource.id }}"
+                                               {% if resource.completion_status %}checked{% endif %}>
+                                        <label class="form-check-label">Completed</label>
+                                    </div>
+                                    <a href="{{ resource.url }}" class="btn btn-primary btn-sm" target="_blank">
+                                        View Resource
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('lowBandwidthFilter').addEventListener('change', function() {
+    const highBandwidthResources = document.querySelectorAll('[data-high-bandwidth]');
+    highBandwidthResources.forEach(resource => {
+        resource.style.display = this.checked ? 'none' : 'block';
+    });
+    
+    // Update URL without reloading the page
+    const url = new URL(window.location);
+    if (this.checked) {
+        url.searchParams.set('low_bandwidth', 'true');
+    } else {
+        url.searchParams.delete('low_bandwidth');
+    }
+    window.history.pushState({}, '', url);
+});
+
+// Handle resource completion
+document.querySelectorAll('.resource-completion').forEach(checkbox => {
+    checkbox.addEventListener('change', async function() {
+        try {
+            const response = await fetch('/update_resource_status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    resource_id: this.dataset.resourceId,
+                    completed: this.checked
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to update resource status');
+            }
+            
+            // Update progress bar
+            const completed = document.querySelectorAll('.resource-completion:checked').length;
+            const total = document.querySelectorAll('.resource-completion').length;
+            const progress = (completed / total * 100);
+            
+            document.querySelector('.progress-bar').style.width = `${progress}%`;
+            document.querySelector('.progress-bar').textContent = `${completed}/${total} Resources Completed`;
+        } catch (error) {
+            alert('Error updating resource status: ' + error.message);
+            this.checked = !this.checked; // Revert the checkbox
+        }
+    });
+});
+
+// Apply initial filter state
+if (document.getElementById('lowBandwidthFilter').checked) {
+    document.querySelectorAll('[data-high-bandwidth]').forEach(resource => {
+        resource.style.display = 'none';
+    });
+}
+</script>
+{% endblock %} 
