@@ -10,22 +10,103 @@
     {% if current_user.is_authenticated and current_user.dark_mode %}
     <link rel="stylesheet" href="{{ url_for('static', filename='dark-mode.css') }}">
     {% endif %}
+    <style>
+        :root {
+            --primary-purple: #6a1b9a;
+            --secondary-purple: #8e24aa;
+            --light-purple: #9c27b0;
+        }
+        
+        .navbar {
+            background-color: var(--primary-purple) !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+            color: white !important;
+        }
+        
+        .nav-link {
+            color: rgba(255,255,255,0.9) !important;
+            transition: color 0.3s ease;
+        }
+        
+        .nav-link:hover {
+            color: white !important;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-purple);
+            border-color: var(--primary-purple);
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--secondary-purple);
+            border-color: var(--secondary-purple);
+        }
+        
+        .btn-outline-primary {
+            color: var(--primary-purple);
+            border-color: var(--primary-purple);
+        }
+        
+        .btn-outline-primary:hover {
+            background-color: var(--primary-purple);
+            border-color: var(--primary-purple);
+        }
+        
+        .text-primary {
+            color: var(--primary-purple) !important;
+        }
+
+        #darkModeToggle {
+            transition: all 0.3s ease;
+        }
+
+        #darkModeToggle:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .dark-mode-switch {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .dark-mode-switch i {
+            margin-right: 0.5rem;
+        }
+    </style>
+    {% block extra_styles %}{% endblock %}
 </head>
 <body class="{% if current_user.is_authenticated and current_user.dark_mode %}dark-mode{% endif %}">
-    <nav class="navbar navbar-expand-lg {% if current_user.is_authenticated and current_user.dark_mode %}navbar-dark bg-dark{% else %}navbar-dark bg-primary{% endif %}">
+    <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('home') }}">LeafLearn</a>
+            <a class="navbar-brand" href="{{ url_for('home') }}">
+                <i class="fas fa-leaf me-2"></i>LeafLearn
+            </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
+                {% block navbar_content %}
                 <ul class="navbar-nav me-auto">
                     {% if current_user.is_authenticated %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-chart-line me-1"></i>Dashboard
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('leaderboard') }}">Leaderboard</a>
+                        <a class="nav-link" href="{{ url_for('leaderboard') }}">
+                            <i class="fas fa-trophy me-1"></i>Leaderboard
+                        </a>
                     </li>
                     {% endif %}
                 </ul>
@@ -46,17 +127,24 @@
                         </span>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+                        <a class="nav-link" href="{{ url_for('logout') }}">
+                            <i class="fas fa-sign-out-alt me-1"></i>Logout
+                        </a>
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+                        <a class="nav-link" href="{{ url_for('login') }}">
+                            <i class="fas fa-sign-in-alt me-1"></i>Login
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('register') }}">Register</a>
+                        <a class="nav-link" href="{{ url_for('register') }}">
+                            <i class="fas fa-user-plus me-1"></i>Register
+                        </a>
                     </li>
                     {% endif %}
                 </ul>
+                {% endblock %}
             </div>
         </div>
     </nav>

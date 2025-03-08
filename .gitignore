@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database
+*.db
+*.sqlite3
+instance/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Exclude all templates except essential ones
+templates/*
+!templates/base.html
+!templates/index.html
+!templates/login.html
+!templates/register.html
+!templates/dashboard.html
+
+# Exclude test and sample data files
+create_sample_data.py
+test_*.py
+
+# Exclude all static files except essential ones
+static/*
+!static/css/
+!static/js/
+static/css/*
+!static/css/style.css
+static/js/*
+!static/js/main.js 
