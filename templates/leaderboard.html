@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Sustainability Leaderboard - LeafLearn{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <!-- Stats Overview Card -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="card-title mb-0">Sustainability Leaderboard</h2>
+                        <div class="btn-group">
+                            <a href="{{ url_for('leaderboard', time='all') }}" 
+                               class="btn btn-outline-primary {% if time_filter == 'all' %}active{% endif %}">All Time</a>
+                            <a href="{{ url_for('leaderboard', time='month') }}" 
+                               class="btn btn-outline-primary {% if time_filter == 'month' %}active{% endif %}">Monthly</a>
+                            <a href="{{ url_for('leaderboard', time='week') }}" 
+                               class="btn btn-outline-primary {% if time_filter == 'week' %}active{% endif %}">Weekly</a>
+                        </div>
+                    </div>
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <h4 class="text-primary">{{ total_users }}</h4>
+                            <p class="text-muted">Total Learners</p>
+                        </div>
+                        <div class="col-md-4" id="totalActionsContainer">
+                            <h4 class="text-success">Loading...</h4>
+                            <p class="text-muted">Sustainable Actions</p>
+                        </div>
+                        <div class="col-md-4" id="avgScoreContainer">
+                            <h4 class="text-info">Loading...</h4>
+                            <p class="text-muted">Avg. Score</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hall of Fame -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h3 class="card-title">Hall of Fame</h3>
+                    <div class="row">
+                        {% for user in top_users %}
+                        <div class="col-md-4 text-center">
+                            <div class="trophy-container mb-3">
+                                {% if loop.index == 1 %}
+                                <i class="fas fa-trophy text-warning fa-3x"></i>
+                                {% elif loop.index == 2 %}
+                                <i class="fas fa-medal text-secondary fa-3x"></i>
+                                {% else %}
+                                <i class="fas fa-award text-bronze fa-3x"></i>
+                                {% endif %}
+                            </div>
+                            <h5>{{ user.username }}</h5>
+                            <p class="text-success mb-0">{{ user.sustainability_score }} points</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Leaderboard List -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="leaderboard-container">
+                        {% for user_data in users_data %}
+                        <div class="leaderboard-item d-flex align-items-center mb-3 p-3 {% if user_data.rank <= 3 %}top-three{% endif %}">
+                            <div class="position-indicator me-4">
+                                <span class="position-number">#{{ user_data.rank }}</span>
+                            </div>
+                            
+                            <div class="user-info flex-grow-1">
+                                <h5 class="mb-1">{{ user_data.user.username }}</h5>
+                                <div class="sustainability-stats">
+                                    <span class="badge bg-success me-2">
+                                        <i class="fas fa-leaf"></i> {{ user_data.user.sustainability_score }} points
+                                    </span>
+                                    <span class="badge bg-info me-2">
+                                        <i class="fas fa-chart-line"></i> {{ "%.1f"|format(user_data.stats.avg_score) }}% avg
+                                    </span>
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fas fa-book"></i> {{ user_data.stats.total_quizzes }} quizzes
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div class="achievements">
+                                {% if user_data.stats.achievements.quiz_master %}
+                                <span class="badge bg-primary me-2" title="Quiz Master">
+                                    <i class="fas fa-graduation-cap"></i>
+                                </span>
+                                {% endif %}
+                                {% if user_data.stats.achievements.eco_warrior %}
+                                <span class="badge bg-success me-2" title="Eco Warrior">
+                                    <i class="fas fa-tree"></i>
+                                </span>
+                                {% endif %}
+                                {% if user_data.stats.achievements.perfect_score %}
+                                <span class="badge bg-warning text-dark me-2" title="Perfect Score">
+                                    <i class="fas fa-star"></i>
+                                </span>
+                                {% endif %}
+                                {% if user_data.stats.achievements.consistent_learner %}
+                                <span class="badge bg-info me-2" title="Consistent Learner">
+                                    <i class="fas fa-clock"></i>
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="text-center text-muted">
+                            <p>No users have earned sustainability points yet. Be the first!</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if pagination.pages > 1 %}
+                    <nav aria-label="Leaderboard pagination" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if pagination.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('leaderboard', page=pagination.prev_num, time=time_filter) }}">Previous</a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                            {% if page_num %}
+                            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('leaderboard', page=page_num, time=time_filter) }}">{{ page_num }}</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                            {% endfor %}
+                            
+                            {% if pagination.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('leaderboard', page=pagination.next_num, time=time_filter) }}">Next</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- How to Earn Points Card -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h3 class="card-title">How to Earn Points</h3>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5 class="mb-3">Actions</h5>
+                            <ul class="list-unstyled">
+                                <li class="mb-2">
+                                    <i class="fas fa-moon text-primary"></i>
+                                    <strong>Dark Mode:</strong> +10 points
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-tachometer-alt text-success"></i>
+                                    <strong>Low Bandwidth:</strong> +5 points
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-clock text-warning"></i>
+                                    <strong>Quick Completion:</strong> +2 points
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h5 class="mb-3">Achievements</h5>
+                            <ul class="list-unstyled">
+                                <li class="mb-2">
+                                    <i class="fas fa-graduation-cap text-primary"></i>
+                                    <strong>Quiz Master:</strong> Complete 10+ quizzes
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-tree text-success"></i>
+                                    <strong>Eco Warrior:</strong> 20+ sustainable actions
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-star text-warning"></i>
+                                    <strong>Perfect Score:</strong> 100% on any quiz
+                                </li>
+                                <li class="mb-2">
+                                    <i class="fas fa-clock text-info"></i>
+                                    <strong>Consistent Learner:</strong> 80%+ avg on 5+ quizzes
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch leaderboard stats
+    fetch('/api/leaderboard/stats')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('totalActionsContainer').querySelector('h4').textContent = data.total_actions;
+            document.getElementById('avgScoreContainer').querySelector('h4').textContent = data.average_score + '%';
+        })
+        .catch(error => console.error('Error fetching leaderboard stats:', error));
+});
+</script>
+{% endblock %} 
