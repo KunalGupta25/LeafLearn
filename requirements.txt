@@ -7,4 +7,5 @@ transformers==4.38.2
 sentence-transformers==3.4.1
 python-dotenv==1.0.1
 werkzeug==3.0.1
-SQLAlchemy==1.4.23 
+SQLAlchemy==1.4.23
+Flask-Caching==2.1.0 

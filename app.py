@@ -3,8 +3,10 @@ from flask_login import login_user, login_required, logout_user, current_user
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
+from functools import wraps
+from flask_caching import Cache
 
 from extensions import db, login_manager
 from models import User, Quiz, Question, QuizResult, QuizAnswer, SustainableAction, StudyPlan, StudyResource
@@ -17,6 +19,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize extensions
 db.init_app(app)
 login_manager.init_app(app)
+
+# Initialize cache
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -319,10 +324,88 @@ def toggle_dark_mode():
     db.session.commit()
     return jsonify({'dark_mode': current_user.dark_mode})
 
+def calculate_user_stats(user):
+    """Calculate detailed statistics for a user."""
+    total_quizzes = len(user.quizzes)
+    avg_score = sum(result.score for result in user.quizzes) / total_quizzes if total_quizzes > 0 else 0
+    total_actions = len(user.sustainable_actions)
+    
+    # Calculate achievements
+    achievements = {
+        'quiz_master': total_quizzes >= 10,
+        'eco_warrior': total_actions >= 20,
+        'perfect_score': any(result.score == 100 for result in user.quizzes),
+        'consistent_learner': total_quizzes >= 5 and avg_score >= 80
+    }
+    
+    return {
+        'total_quizzes': total_quizzes,
+        'avg_score': avg_score,
+        'total_actions': total_actions,
+        'achievements': achievements
+    }
+
 @app.route('/leaderboard')
+@cache.cached(timeout=300)  # Cache for 5 minutes
 def leaderboard():
-    users = User.query.order_by(User.sustainability_score.desc()).limit(10).all()
-    return render_template('leaderboard.html', users=users)
+    # Get filter parameters
+    time_filter = request.args.get('time', 'all')  # all, week, month
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    
+    # Base query
+    query = User.query
+    
+    # Apply time filter
+    if time_filter == 'week':
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        query = query.join(SustainableAction).filter(SustainableAction.created_at >= week_ago)
+    elif time_filter == 'month':
+        month_ago = datetime.utcnow() - timedelta(days=30)
+        query = query.join(SustainableAction).filter(SustainableAction.created_at >= month_ago)
+    
+    # Get users ordered by sustainability score with pagination
+    paginated_users = query.order_by(User.sustainability_score.desc())\
+                          .paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Calculate rank and stats for each user
+    users_data = []
+    start_rank = (page - 1) * per_page + 1
+    
+    for idx, user in enumerate(paginated_users.items):
+        rank = start_rank + idx
+        stats = calculate_user_stats(user)
+        
+        users_data.append({
+            'user': user,
+            'rank': rank,
+            'stats': stats
+        })
+    
+    # Get top 3 users of all time (for hall of fame)
+    top_users = User.query.order_by(User.sustainability_score.desc()).limit(3).all()
+    
+    return render_template('leaderboard.html',
+                         users_data=users_data,
+                         top_users=top_users,
+                         pagination=paginated_users,
+                         time_filter=time_filter,
+                         total_users=User.query.count())
+
+@app.route('/api/leaderboard/stats')
+@cache.cached(timeout=300)  # Cache for 5 minutes
+def leaderboard_stats():
+    """API endpoint for leaderboard statistics."""
+    total_users = User.query.count()
+    total_actions = SustainableAction.query.count()
+    avg_score = db.session.query(db.func.avg(User.sustainability_score)).scalar() or 0
+    
+    return jsonify({
+        'total_users': total_users,
+        'total_actions': total_actions,
+        'average_score': round(avg_score, 2),
+        'last_updated': datetime.utcnow().isoformat()
+    })
 
 @app.route('/study_plan/<int:plan_id>')
 @login_required
