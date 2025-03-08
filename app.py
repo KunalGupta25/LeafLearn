@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from flask_login import login_user, login_required, logout_user, current_user
 import torch
+import re
+
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import os
 from datetime import datetime, timedelta
@@ -49,105 +51,211 @@ def load_ai_model():
         return False
 
 def calculate_semantic_similarity(text1, text2):
-    global model
-    if model is None:
-        print("Error: Model not loaded")
-        try:
-            print("Attempting to reload model...")
-            load_ai_model()
-        except Exception as e:
-            print(f"Failed to reload model: {str(e)}")
+    """
+    Calculate similarity between user answer and correct answer based on keywords.
+    text1: user's answer (long text paragraph)
+    text2: correct answer containing keywords separated by |
+    
+    Returns a score between 0 and 1 based on:
+    - Percentage of required keywords found in the answer
+    - Bonuses for proper explanation and context
+    - Penalties for very short or irrelevant answers
+    """
+    if not isinstance(text1, str) or not isinstance(text2, str):
+        print(f"Invalid input types: text1 type = {type(text1)}, text2 type = {type(text2)}")
         return 0.0
     
-    try:
-        # Ensure texts are strings and not empty
-        if not isinstance(text1, str) or not isinstance(text2, str):
-            print(f"Invalid input types: text1 type = {type(text1)}, text2 type = {type(text2)}")
-            return 0.0
-        
-        if not text1.strip() or not text2.strip():
-            print("Empty text input")
-            return 0.0
-        
-        # Preprocess the texts
-        def preprocess_text(text):
-            # Convert to lowercase
-            text = text.lower()
-            # Remove extra whitespace
-            text = ' '.join(text.split())
-            # Remove punctuation except in numbers (e.g., 3.14)
-            text = ''.join(char for i, char in enumerate(text) if char.isalnum() or char.isspace() or 
-                         (char == '.' and i > 0 and i < len(text)-1 and text[i-1].isdigit() and text[i+1].isdigit()))
-            return text
-        
-        processed_text1 = preprocess_text(text1)
-        processed_text2 = preprocess_text(text2)
-        
-        print("\nCalculating similarity between:")
-        print(f"Processed Text 1: '{processed_text1}'")
-        print(f"Processed Text 2: '{processed_text2}'")
-        
-        # If texts are identical after preprocessing, return 1.0
-        if processed_text1 == processed_text2:
-            print("Exact match after preprocessing")
-            return 1.0
-        
-        # Get embeddings for both texts
-        embeddings = model.encode([processed_text1, processed_text2])
-        
-        # Convert to PyTorch tensors
-        import torch
-        embedding1 = torch.FloatTensor(embeddings[0])
-        embedding2 = torch.FloatTensor(embeddings[1])
-        
-        # Calculate cosine similarity
-        similarity = torch.nn.functional.cosine_similarity(
-            embedding1.unsqueeze(0), 
-            embedding2.unsqueeze(0)
-        )
-        
-        similarity_value = float(similarity[0])
-        print(f"Calculated similarity: {similarity_value:.4f}")
-        
-        # Apply semantic boosting for similar numerical values
-        def extract_numbers(text):
-            import re
-            return [float(n) for n in re.findall(r'\d*\.?\d+', text)]
-        
-        numbers1 = extract_numbers(processed_text1)
-        numbers2 = extract_numbers(processed_text2)
-        
-        if numbers1 and numbers2:
-            # If both answers contain numbers, check if they're close
-            number_similarities = []
-            for n1 in numbers1:
-                for n2 in numbers2:
-                    if abs(n1 - n2) < 0.1:  # Numbers are very close
-                        number_similarities.append(1.0)
-                    elif abs(n1 - n2) < 1.0:  # Numbers are somewhat close
-                        number_similarities.append(0.8)
-                    else:
-                        number_similarities.append(0.0)
-            
-            if number_similarities:
-                max_number_similarity = max(number_similarities)
-                # Boost similarity if numbers are close
-                similarity_value = max(similarity_value, max_number_similarity)
-                print(f"Similarity after number comparison: {similarity_value:.4f}")
-        
-        return similarity_value
-        
-    except Exception as e:
-        print(f"Error calculating similarity: {str(e)}")
-        import traceback
-        print("Traceback:", traceback.format_exc())
+    if not text1.strip() or not text2.strip():
+        print("Empty text input")
         return 0.0
+    
+    # Preprocess the texts
+    def preprocess_text(text):
+        text = text.lower()
+        text = ' '.join(text.split())
+        import re
+        text = re.sub(r'[^\w\s()\.+]', ' ', text)
+        return text
+    
+    def find_keyword_matches(answer_text, keyword):
+        """Find all variations of a keyword in the answer text with context awareness"""
+        keyword = keyword.strip().lower()
+        
+        if keyword in ['oop', 'api', 'sql', 'xml', 'json', 'http']:
+            return keyword in answer_text.lower().split()
+        
+        # Create variations of the keyword
+        variations = [
+            r'\b' + keyword + r'\b',  
+            r'\b' + keyword + r's\b',  
+            r'\b' + keyword + r'ing\b', 
+            r'\b' + keyword + r'ed\b',  
+            r'\b' + keyword + r'es\b',  
+        ]
+        
+        
+        if ' ' in keyword:
+            parts = keyword.split()
+            variations.extend([
+                r'\b' + r'\s+'.join(parts) + r'\b',  
+                r'\b' + r'\s*'.join(parts) + r'\b',  
+                r'\b' + r'[\s-]*'.join(parts) + r'\b',  
+            ])
+            
+            # Also check if all parts appear within a reasonable distance
+            all_parts_present = all(part in answer_text for part in parts)
+            if all_parts_present:
+                # Check if parts appear within 10 words of each other
+                words = answer_text.split()
+                positions = []
+                for part in parts:
+                    for i, word in enumerate(words):
+                        if part in word:
+                            positions.append(i)
+                            break
+                if positions and max(positions) - min(positions) <= 10:
+                    return True
+        
+        # Check if any variation matches
+        import re
+        for pattern in variations:
+            if re.search(pattern, answer_text.lower()):
+                return True
+                
+        return False
+    
+    def analyze_keyword_context(answer_text, keyword, window_size=10):
+        """Analyze if the keyword is used in proper context"""
+        words = answer_text.split()
+        keyword_variations = [keyword] + [keyword + s for s in ['s', 'ing', 'ed', 'es']]
+        
+        for i, word in enumerate(words):
+            if any(kw in word.lower() for kw in keyword_variations):
+                # Get surrounding words
+                start = max(0, i - window_size)
+                end = min(len(words), i + window_size)
+                context = ' '.join(words[start:end])
+                
+                # Check for explanation indicators
+                explanation_indicators = ['is', 'means', 'refers to', 'involves', 'includes', 'represents', 
+                                       'allows', 'enables', 'helps', 'used for', 'example']
+                if any(indicator in context.lower() for indicator in explanation_indicators):
+                    return True
+        return False
+    
+    processed_answer = preprocess_text(text1)
+    
+    # Split the correct answer into keywords
+    keywords = [kw.strip() for kw in text2.split('|')]
+    total_keywords = len(keywords)
+    
+    print("\nAnalyzing answer:")
+    print(f"Total keywords to match: {total_keywords}")
+    print(f"Keywords: {keywords}")
+    
+    # Count matched keywords and analyze their context
+    matched_keywords = []
+    keywords_with_context = []
+    
+    for keyword in keywords:
+        if find_keyword_matches(processed_answer, keyword):
+            matched_keywords.append(keyword)
+            if analyze_keyword_context(processed_answer, keyword):
+                keywords_with_context.append(keyword)
+    
+    # Calculate base score from keyword matches
+    matched_count = len(matched_keywords)
+    context_count = len(keywords_with_context)
+    
+    # Base score is the percentage of keywords matched
+    base_score = matched_count / total_keywords if total_keywords > 0 else 0.0
+    
+    print(f"\nMatched keywords ({matched_count}/{total_keywords}):")
+    for kw in matched_keywords:
+        print(f"- {kw}")
+    
+    print(f"\nKeywords with proper context ({context_count}/{matched_count}):")
+    for kw in keywords_with_context:
+        print(f"- {kw}")
+    
+    # Apply adjustments
+    final_score = base_score
+    
+    # Bonus for keywords used in proper context
+    context_bonus = (context_count / total_keywords) * 0.2 if total_keywords > 0 else 0.0  # Up to 20% bonus for good context
+    final_score = min(1.0, final_score + context_bonus)
+    
+    # Bonus for comprehensive answers
+    word_count = len(processed_answer.split())
+    if word_count >= 100:  # Long, detailed answer
+        final_score = min(1.0, final_score + 0.15)
+        print("Applied length bonus: +0.15 for comprehensive answer")
+    elif word_count >= 50:  # Medium length answer
+        final_score = min(1.0, final_score + 0.1)
+        print("Applied length bonus: +0.1 for good length answer")
+    elif word_count < 20:  # Too short
+        final_score = max(0.0, final_score - 0.1)
+        print("Applied length penalty: -0.1 for short answer")
+    
+    # Bonus for well-structured answer
+    structure_patterns = [
+        r'\d\.',  
+        r'[-•*]',  
+        r'(?i)\b(first|second|third|finally|moreover|however)\b',  
+        r'(?i)\b(for example|such as|specifically)\b',  
+        r'(?i)\b(because|therefore|thus|hence)\b',  
+    ]
+    
+    structure_matches = 0
+    for pattern in structure_patterns:
+        if re.search(pattern, text1):
+            structure_matches += 1
+    
+    if structure_matches >= 2:
+        structure_bonus = 0.1  # Up to 10% bonus for good structure
+        final_score = min(1.0, final_score + structure_bonus)
+        print(f"Applied structure bonus: +{structure_bonus} for well-structured answer")
+    
+    # Ensure final score is between 0 and 1
+    final_score = max(0.0, min(1.0, final_score))
+    
+    print(f"\nScoring breakdown:")
+    print(f"Base score (keyword matches): {base_score:.2f}")
+    print(f"Context bonus: {context_bonus:.2f}")
+    print(f"Final score: {final_score:.4f}")
+    
+    return final_score
+
+def get_similarity_threshold(user_answer, correct_answer):
+    """
+    Determine the similarity threshold based on answer characteristics.
+    Returns a lower threshold to allow for partial credit.
+    """
+    
+    threshold = 0.3  # Lower base threshold for keyword-based matching
+    
+    
+    keyword_count = len(correct_answer.split('|'))
+    
+    
+    if keyword_count <= 3:
+        threshold = 0.4  # Still strict but more lenient for few keywords
+    elif keyword_count >= 8:
+        threshold = 0.2  # More lenient for many keywords
+ 
+    word_count = len(user_answer.split())
+    if word_count < 10:
+        threshold += 0.1  
+    elif word_count > 50:
+        threshold -= 0.1  
+    
+    return threshold
 
 def generate_study_plan(user_id, quiz_results):
     # Analyze quiz results and create personalized study plan
     weak_areas = []
     for result in quiz_results:
-        if result.score < 0.7:  # Less than 70% correct
+        if result.score < 0.7:  
             weak_areas.append(result.quiz.topic)
     
     study_plan = StudyPlan(
@@ -259,135 +367,163 @@ def take_quiz(quiz_id):
 @app.route('/submit_quiz', methods=['POST'])
 @login_required
 def submit_quiz():
-    data = request.json
-    quiz_id = data.get('quiz_id')
-    answers = data.get('answers')
-    
-    if not quiz_id or not answers:
-        return jsonify({"error": "Missing quiz_id or answers"}), 400
-    
-    print(f"\nReceived quiz submission - quiz_id: {quiz_id}, answers count: {len(answers)}")
-    
-    quiz_result = QuizResult(
-        user_id=current_user.id,
-        quiz_id=quiz_id,
-        score=0.0,
-        completion_time=data.get('completion_time', 0)
-    )
-    db.session.add(quiz_result)
-    
-    total_questions = len(answers)
-    correct_count = 0
-    
-    # Dynamic similarity threshold based on answer length and content
-    def get_similarity_threshold(user_answer, correct_answer):
-        # Base threshold
-        threshold = 0.6
-        
-        # Adjust threshold based on answer length
-        avg_length = (len(user_answer.split()) + len(correct_answer.split())) / 2
-        if avg_length <= 3:  # Very short answers
-            threshold = 0.8  # Require higher similarity for short answers
-        elif avg_length >= 20:  # Long answers
-            threshold = 0.5  # More lenient for longer answers
-        
-        # Adjust for numerical answers
-        if any(char.isdigit() for char in user_answer) and any(char.isdigit() for char in correct_answer):
-            threshold = 0.85  # Stricter for numerical answers
-        
-        return threshold
-    
-    print("\nProcessing answers:")
-    for answer in answers:
-        question = Question.query.get(answer['question_id'])
-        if not question:
-            print(f"Question not found for id: {answer['question_id']}")
-            continue
-            
-        user_answer = answer['answer'].strip()
-        correct_answer = question.correct_answer.strip()
-        
-        print(f"\nQuestion {question.id}:")
-        print(f"Content: {question.content}")
-        print(f"User answer: '{user_answer}'")
-        print(f"Correct answer: '{correct_answer}'")
-        
-        if not user_answer:
-            print("Empty user answer")
-            similarity_score = 0.0
-            is_correct = False
-        else:
-            similarity_score = calculate_semantic_similarity(user_answer, correct_answer)
-            threshold = get_similarity_threshold(user_answer, correct_answer)
-            is_correct = similarity_score >= threshold
-            print(f"Similarity score: {similarity_score:.4f}")
-            print(f"Threshold: {threshold}")
-            print(f"Is correct: {is_correct}")
-        
-        if is_correct:
-            correct_count += 1
-        
-        quiz_answer = QuizAnswer(
-            quiz_result=quiz_result,
-            question_id=question.id,
-            user_answer=answer['answer'],
-            is_correct=is_correct
-        )
-        db.session.add(quiz_answer)
-    
-    # Calculate percentage score
-    if total_questions > 0:
-        quiz_result.score = (correct_count / total_questions) * 100
-        print(f"\nFinal score: {quiz_result.score:.1f}% ({correct_count}/{total_questions} correct)")
-    
-    # Add sustainability points for using low bandwidth mode
-    if data.get('low_bandwidth'):
-        action = SustainableAction(
-            user_id=current_user.id,
-            action_type='low_bandwidth',
-            points=5
-        )
-        db.session.add(action)
-        current_user.sustainability_score += 5
-    
     try:
-        db.session.commit()
-        study_plan = generate_study_plan(current_user.id, [quiz_result])
+        data = request.json
+        if not data:
+            print("Error: No JSON data received")
+            return jsonify({"error": "No data received"}), 400
+            
+        quiz_id = data.get('quiz_id')
+        answers = data.get('answers')
         
-        return jsonify({
-            'score': quiz_result.score,
-            'correct_count': correct_count,
-            'total_questions': total_questions,
-            'study_plan_id': study_plan.id,
-            'detailed_results': [{
-                'question_id': answer['question_id'],
-                'user_answer': answer['answer'].strip(),
-                'correct_answer': Question.query.get(answer['question_id']).correct_answer.strip() if Question.query.get(answer['question_id']) else '',
-                'similarity_score': calculate_semantic_similarity(
-                    answer['answer'].strip(),
-                    Question.query.get(answer['question_id']).correct_answer.strip()
-                ) if Question.query.get(answer['question_id']) and answer['answer'].strip() else 0.0
-            } for answer in answers]
-        })
+        print(f"\nReceived quiz submission:")
+        print(f"Quiz ID: {quiz_id}")
+        print(f"Answers: {json.dumps(answers, indent=2)}")
+        
+        if not quiz_id or not answers:
+            print("Error: Missing quiz_id or answers")
+            return jsonify({"error": "Missing quiz_id or answers"}), 400
+        
+        # Validate quiz exists
+        quiz = Quiz.query.get(quiz_id)
+        if not quiz:
+            print(f"Error: Quiz with id {quiz_id} not found")
+            return jsonify({"error": f"Quiz with id {quiz_id} not found"}), 404
+        
+        print(f"\nProcessing quiz submission - quiz_id: {quiz_id}, answers count: {len(answers)}")
+        
+        quiz_result = QuizResult(
+            user_id=current_user.id,
+            quiz_id=quiz_id,
+            score=0.0,
+            completion_time=data.get('completion_time', 0)
+        )
+        db.session.add(quiz_result)
+        
+        total_questions = len(answers)
+        total_score = 0.0
+        processed_answers = []
+        
+        print("\nProcessing answers:")
+        for answer in answers:
+            try:
+                question = Question.query.get(answer.get('question_id'))
+                if not question:
+                    print(f"Question not found for id: {answer.get('question_id')}")
+                    continue
+                
+                user_answer = answer.get('answer', '').strip()
+                correct_answer = question.correct_answer.strip()
+                
+                print(f"\nQuestion {question.id}:")
+                print(f"Content: {question.content}")
+                print(f"User answer: '{user_answer}'")
+                print(f"Correct answer keywords: '{correct_answer}'")
+                
+                if not user_answer:
+                    print("Empty user answer")
+                    similarity_score = 0.0
+                    is_correct = False
+                else:
+                    similarity_score = calculate_semantic_similarity(user_answer, correct_answer)
+                    threshold = get_similarity_threshold(user_answer, correct_answer)
+                    # Consider partially correct if score is above 30% of threshold
+                    is_correct = similarity_score >= threshold
+                    print(f"Similarity score: {similarity_score:.4f}")
+                    print(f"Threshold: {threshold}")
+                    print(f"Is correct: {is_correct}")
+                
+                # Add the similarity score to total (this gives partial credit)
+                total_score += similarity_score
+                
+                quiz_answer = QuizAnswer(
+                    quiz_result=quiz_result,
+                    question_id=question.id,
+                    user_answer=user_answer,
+                    is_correct=is_correct,
+                    similarity_score=similarity_score
+                )
+                db.session.add(quiz_answer)
+                
+                processed_answers.append({
+                    'question_id': question.id,
+                    'user_answer': user_answer,
+                    'correct_answer': correct_answer,
+                    'similarity_score': similarity_score,
+                    'is_correct': is_correct,
+                    'matched_keywords': [kw for kw in correct_answer.split('|') 
+                                      if kw.strip().lower() in user_answer.lower()]
+                })
+                
+            except Exception as e:
+                print(f"Error processing answer: {str(e)}")
+                import traceback
+                print("Traceback:", traceback.format_exc())
+                continue
+        
+        # Calculate percentage score based on average similarity scores
+        if total_questions > 0:
+            quiz_result.score = (total_score / total_questions) * 100 if total_questions > 0 else 0.0
+
+            print(f"\nFinal score: {quiz_result.score:.1f}% (average similarity score: {total_score/total_questions:.2f})")
+        
+        try:
+            db.session.commit()
+            
+            # Recommend study plan based on score
+            if quiz_result.score < 50:
+                study_plan = StudyPlan.query.filter_by(topic="Improving Programming Fundamentals", user_id=current_user.id).first()
+            else:
+                study_plan = StudyPlan.query.filter_by(topic="Advanced Programming Concepts", user_id=current_user.id).first()
+            
+            response_data = {
+                'score': quiz_result.score,
+                'correct_count': sum(1 for a in processed_answers if a['is_correct']),
+                'total_questions': total_questions,
+                'study_plan_id': study_plan.id,
+                'detailed_results': processed_answers
+            }
+            
+            print("\nSending response:", json.dumps(response_data, indent=2))
+            return jsonify(response_data)
+            
+        except Exception as e:
+            print(f"Error committing to database: {str(e)}")
+            import traceback
+            print("Traceback:", traceback.format_exc())
+            db.session.rollback()
+            return jsonify({"error": "Database error: " + str(e)}), 500
+            
     except Exception as e:
-        print(f"Error committing quiz result: {str(e)}")
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        print(f"Unexpected error in submit_quiz: {str(e)}")
+        import traceback
+        print("Traceback:", traceback.format_exc())
+        return jsonify({"error": "Server error: " + str(e)}), 500
 
 @app.route('/toggle_dark_mode', methods=['POST'])
 @login_required
 def toggle_dark_mode():
     current_user.dark_mode = not current_user.dark_mode
     
-    # Record sustainable action
+    # Record sustainable action and update points
     if current_user.dark_mode:
+        # Add points for enabling dark mode
         action = SustainableAction(
             user_id=current_user.id,
-            action_type='dark_mode',
+            action_type='dark_mode_enabled',
             points=10
         )
         db.session.add(action)
         current_user.sustainability_score += 10
+    else:
+        # Subtract points for disabling dark mode
+        action = SustainableAction(
+            user_id=current_user.id,
+            action_type='dark_mode_disabled',
+            points=-10
+        )
+        db.session.add(action)
+        current_user.sustainability_score -= 10
     
     db.session.commit()
     return jsonify({'dark_mode': current_user.dark_mode})
@@ -414,7 +550,7 @@ def calculate_user_stats(user):
     }
 
 @app.route('/leaderboard')
-@cache.cached(timeout=300)  # Cache for 5 minutes
+@cache.cached(timeout=300, key_prefix=lambda: f'leaderboard_{request.args.get("time", "all")}_{current_user.dark_mode if current_user.is_authenticated else False}')  # Cache for 5 minutes with dark mode state
 def leaderboard():
     # Get filter parameters
     time_filter = request.args.get('time', 'all')  # all, week, month
@@ -500,11 +636,11 @@ def update_resource_status():
 @login_required
 def analyze():
     data = request.json
-    if not data or 'response' not in data:
-        return jsonify({"error": "No quiz response provided"}), 400
+    if not data or 'response' not in data or 'correct_answer' not in data:
+        return jsonify({"error": "Missing response or correct answer"}), 400
     
-    result = calculate_semantic_similarity(data['response'], data['response'])
-    return jsonify(result)
+    result = calculate_semantic_similarity(data['response'], data['correct_answer'])
+    return jsonify({"similarity_score": result})
 
 if __name__ == '__main__':
     # Create database tables
@@ -517,4 +653,5 @@ if __name__ == '__main__':
     else:
         print("Warning: AI model failed to load")
     
-    app.run(debug=True) 
+    # Run the app on port 5000
+    app.run(host='0.0.0.0', port=5000, debug=True)
