@@ -64,7 +64,7 @@ templates/*
 !templates/leaderboard.html
 
 # Exclude test and sample data files
-create_sample_data.py
+!create_sample_data.py
 test_*.py
 
 # Static files configuration
