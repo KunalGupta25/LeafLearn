@@ -128,7 +128,13 @@ def generate_study_plan(user_id, quiz_results):
 @app.route('/')
 def home():
     if current_user.is_authenticated:
-        return render_template('dashboard.html')
+        quiz_results = QuizResult.query.filter_by(user_id=current_user.id).all()
+        study_plans = StudyPlan.query.filter_by(user_id=current_user.id).all()
+        available_quizzes = Quiz.query.all()
+        return render_template('dashboard.html',
+                            quiz_results=quiz_results,
+                            study_plans=study_plans,
+                            available_quizzes=available_quizzes)
     return render_template('index.html')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -170,7 +176,7 @@ def login():
         
         if user and user.check_password(password):
             login_user(user)
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('home'))
         
         flash('Invalid username or password')
     return render_template('login.html')
