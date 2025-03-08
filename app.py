@@ -69,12 +69,31 @@ def calculate_semantic_similarity(text1, text2):
             print("Empty text input")
             return 0.0
         
+        # Preprocess the texts
+        def preprocess_text(text):
+            # Convert to lowercase
+            text = text.lower()
+            # Remove extra whitespace
+            text = ' '.join(text.split())
+            # Remove punctuation except in numbers (e.g., 3.14)
+            text = ''.join(char for i, char in enumerate(text) if char.isalnum() or char.isspace() or 
+                         (char == '.' and i > 0 and i < len(text)-1 and text[i-1].isdigit() and text[i+1].isdigit()))
+            return text
+        
+        processed_text1 = preprocess_text(text1)
+        processed_text2 = preprocess_text(text2)
+        
         print("\nCalculating similarity between:")
-        print(f"Text 1: '{text1}'")
-        print(f"Text 2: '{text2}'")
+        print(f"Processed Text 1: '{processed_text1}'")
+        print(f"Processed Text 2: '{processed_text2}'")
+        
+        # If texts are identical after preprocessing, return 1.0
+        if processed_text1 == processed_text2:
+            print("Exact match after preprocessing")
+            return 1.0
         
         # Get embeddings for both texts
-        embeddings = model.encode([text1, text2])
+        embeddings = model.encode([processed_text1, processed_text2])
         
         # Convert to PyTorch tensors
         import torch
@@ -89,6 +108,33 @@ def calculate_semantic_similarity(text1, text2):
         
         similarity_value = float(similarity[0])
         print(f"Calculated similarity: {similarity_value:.4f}")
+        
+        # Apply semantic boosting for similar numerical values
+        def extract_numbers(text):
+            import re
+            return [float(n) for n in re.findall(r'\d*\.?\d+', text)]
+        
+        numbers1 = extract_numbers(processed_text1)
+        numbers2 = extract_numbers(processed_text2)
+        
+        if numbers1 and numbers2:
+            # If both answers contain numbers, check if they're close
+            number_similarities = []
+            for n1 in numbers1:
+                for n2 in numbers2:
+                    if abs(n1 - n2) < 0.1:  # Numbers are very close
+                        number_similarities.append(1.0)
+                    elif abs(n1 - n2) < 1.0:  # Numbers are somewhat close
+                        number_similarities.append(0.8)
+                    else:
+                        number_similarities.append(0.0)
+            
+            if number_similarities:
+                max_number_similarity = max(number_similarities)
+                # Boost similarity if numbers are close
+                similarity_value = max(similarity_value, max_number_similarity)
+                print(f"Similarity after number comparison: {similarity_value:.4f}")
+        
         return similarity_value
         
     except Exception as e:
@@ -233,8 +279,23 @@ def submit_quiz():
     total_questions = len(answers)
     correct_count = 0
     
-    # Similarity threshold for considering an answer correct
-    SIMILARITY_THRESHOLD = 0.6  # Adjusted threshold to be more lenient
+    # Dynamic similarity threshold based on answer length and content
+    def get_similarity_threshold(user_answer, correct_answer):
+        # Base threshold
+        threshold = 0.6
+        
+        # Adjust threshold based on answer length
+        avg_length = (len(user_answer.split()) + len(correct_answer.split())) / 2
+        if avg_length <= 3:  # Very short answers
+            threshold = 0.8  # Require higher similarity for short answers
+        elif avg_length >= 20:  # Long answers
+            threshold = 0.5  # More lenient for longer answers
+        
+        # Adjust for numerical answers
+        if any(char.isdigit() for char in user_answer) and any(char.isdigit() for char in correct_answer):
+            threshold = 0.85  # Stricter for numerical answers
+        
+        return threshold
     
     print("\nProcessing answers:")
     for answer in answers:
@@ -257,9 +318,10 @@ def submit_quiz():
             is_correct = False
         else:
             similarity_score = calculate_semantic_similarity(user_answer, correct_answer)
-            is_correct = similarity_score >= SIMILARITY_THRESHOLD
+            threshold = get_similarity_threshold(user_answer, correct_answer)
+            is_correct = similarity_score >= threshold
             print(f"Similarity score: {similarity_score:.4f}")
-            print(f"Threshold: {SIMILARITY_THRESHOLD}")
+            print(f"Threshold: {threshold}")
             print(f"Is correct: {is_correct}")
         
         if is_correct:
